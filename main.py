@@ -1,52 +1,48 @@
 import cv2
+import numpy as np
+from ultralytics import YOLO
 
+model = YOLO("yolo11n.pt")
 cap=cv2.VideoCapture(0)
-previous_gray = None
+
 while True:
     ret, frame=cap.read()
     if not ret:
         print("failed to capture frame")
         break
+    results = model(frame, verbose=False)
+    result = results[0]
+    boxes = result.boxes
     
-    #grayscale
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    if previous_gray is None:
-        previous_gray = gray
-        continue
-    
-    #difference of frames
-    difference = cv2.absdiff(previous_gray, gray)
-    
-    #thresholding
-    _, threshold = cv2.threshold(
-        difference,
-        30,
-        255,
-        cv2.THRESH_BINARY
-    )
-    
-    #contours
-    contours, _ = cv2.findContours(
-        threshold,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area < 500:
+    for box, confidence, class_id in zip(boxes.xyxy, boxes.conf, boxes.cls):
+        
+        x1, y1, x2, y2 = map(int, box.tolist())
+        confidence = float(confidence)
+        if confidence<0.5:
             continue
-        x, y, w, h = cv2.boundingRect(contour)
-
+        class_id = int(class_id)
+        class_name = model.names[class_id]
         cv2.rectangle(
+                frame,
+                (x1, y1),
+                (x2, y2),
+                (0, 255, 0),
+                2
+            )
+
+        label = f"{class_name} {confidence:.2f}"
+
+        cv2.putText(
             frame,
-            (x, y),
-            (x + w, y + h),
+            label,
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
             (0, 255, 0),
             2
         )
-        
-    previous_gray = gray
-    cv2.imshow("object analyzer",frame)
+    cv2.imshow("YOLO Object Detection", frame)
+    
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 cap.release()
